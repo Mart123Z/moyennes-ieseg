@@ -174,3 +174,34 @@ input::placeholder{color:light-dark(#9aa8b6,#5f7386);opacity:1}
 .setup{margin-top:20px;padding:16px;border-radius:12px;background:color-mix(in srgb,var(--accent) 12%,transparent);border:1px solid var(--accent)}
 .setup p{margin:6px 0 0;font-size:14px}
 .loading{min-height:100vh;display:grid;place-items:center;color:var(--muted)}
+
+/* Évaluations à venir et template */
+.muted{color:var(--muted);font-weight:400}
+.small{font-size:13px}
+tr.todo td{color:var(--muted)}
+.pill{border:1px dashed var(--line);background:transparent;color:var(--muted);border-radius:999px;padding:2px 10px;min-height:30px;cursor:pointer;font-size:13px}
+.pill:hover{border-color:var(--accent);color:var(--accent)}
+.meter{display:flex}
+.meter i{display:block;height:100%;background:light-dark(#c9d6e2,#33506a)}
+.add-head{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+.add-head h2{margin:0}
+.empty .btn{margin-top:4px}
+dialog.wide{width:min(680px,calc(100vw - 24px))}
+.tpl{list-style:none;margin:0;padding:0;display:grid;gap:8px;max-height:min(52vh,520px);overflow:auto}
+.tpl-item{display:grid;grid-template-columns:minmax(0,1fr) 112px;gap:12px;align-items:center;padding:10px 12px;border:1px solid var(--line);border-radius:12px}
+.tpl-item.done{opacity:.55}
+.tpl-check{display:flex;gap:10px;align-items:flex-start;cursor:pointer}
+.tpl-check input{width:20px;height:20px;margin-top:2px;flex:none;accent-color:var(--deep)}
+.tpl-check small{display:block;color:var(--muted);font-size:13px;margin-top:2px}
+.tpl-ects{display:grid;gap:2px;font-size:12px;font-weight:600;color:var(--muted)}
+.tpl-ects input{height:38px;border:1px solid var(--line);border-radius:8px;padding:0 8px;background:var(--bg);color:var(--ink);font-size:16px;width:100%}
+.tpl-ects em{font-style:normal;font-size:12px;color:var(--accent)}
+.tpl-ects em.ok{color:var(--ok)}
+dialog{max-height:calc(100dvh - 24px);overflow:auto}
+@media (max-width:600px){
+  .tpl{max-height:42dvh}
+  .tpl-item{grid-template-columns:1fr;gap:8px}
+  .tpl-ects{grid-template-columns:auto 90px auto;align-items:center;gap:8px}
+  .add-head .btn{width:100%}
+  #dlg-form{padding:18px}
+}

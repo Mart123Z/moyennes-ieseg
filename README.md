@@ -27,6 +27,11 @@ Tout se fait dans le navigateur. Rien n'est installé ni ne tourne sur ton ordin
 
 Dans Firebase, ouvre **Authentication**, puis **Paramètres** et **Domaines autorisés**. Clique sur **Ajouter un domaine** et saisis `TON-PSEUDO.github.io`.
 
+## Template S1 (Bachelor 1)
+
+Le bouton **Template S1** ajoute d'un coup les matières du semestre 1 du PGE avec leurs évaluations et pondérations. Les notes sont créées « à venir » : l'étudiant les remplit au fil du semestre.
+Les données du modèle sont dans `templates.js` : pour corriger une pondération ou un crédit ECTS, modifie ce fichier (les ECTS `null` sont « à confirmer » et utilisent `ectsProvisoire`).
+
 ## Mises à jour
 
 Modifie un fichier directement sur GitHub (✏️, puis **Commit changes**). Le site se met à jour tout seul en 1 à 2 minutes.

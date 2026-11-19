@@ -61,8 +61,12 @@
     if (!Number.isFinite(credits) || credits < 0 || credits > 60) throw new Error('Les crédits doivent être compris entre 0 et 60.');
     return { name, credits: round2(credits) };
   }
-  function checkGrade(label, value, weight) {
+  function checkGrade(label, value, weight, allowEmpty = false) {
     label = String(label || '').trim().slice(0, 100) || 'Note';
+    if (value === null && allowEmpty) {
+      if (!Number.isFinite(weight) || weight <= 0 || weight > 100) throw new Error('Le pourcentage doit être compris entre 0 et 100.');
+      return { label, value: null, weight: round2(weight) };
+    }
     if (!Number.isFinite(value) || value < 0 || value > 20) throw new Error('La note doit être comprise entre 0 et 20.');
     if (!Number.isFinite(weight) || weight <= 0 || weight > 100) throw new Error('Le pourcentage doit être compris entre 0 et 100.');
     return { label, value: round2(value), weight: round2(weight) };
@@ -75,10 +79,10 @@
       const snap = await fb.getDocs(fb.query(subjCol(), fb.orderBy('position')));
       return snap.docs.map(d => { const x = d.data(); return { id: d.id, name: x.name, credits: x.credits, position: x.position, grades: x.grades || [] }; });
     }),
-    addSubject: data => run(async () => {
+    addSubject: (data, grades = []) => run(async () => {
       const position = state.subjects.reduce((m, s) => Math.max(m, s.position || 0), 0) + 1;
-      const ref = await fb.addDoc(subjCol(), { ...data, position, grades: [] });
-      return { id: ref.id, ...data, position, grades: [] };
+      const ref = await fb.addDoc(subjCol(), { ...data, position, grades });
+      return { id: ref.id, ...data, position, grades };
     }),
     updateSubject: (s, data) => run(() => fb.updateDoc(subjRef(s.id), data)),
     deleteSubject: s => run(() => fb.deleteDoc(subjRef(s.id))),
@@ -86,14 +90,17 @@
   };
 
   // ---------- Calculs ----------
+  const isGraded = g => g.value !== null && g.value !== undefined;
   function stats(s) {
-    const w = s.grades.reduce((a, g) => a + g.weight, 0);
-    const pts = s.grades.reduce((a, g) => a + g.value * g.weight, 0);
+    const graded = s.grades.filter(isGraded);
+    const w = graded.reduce((a, g) => a + g.weight, 0);          // % déjà noté
+    const planned = s.grades.reduce((a, g) => a + g.weight, 0);  // % prévu (noté + à venir)
+    const pts = graded.reduce((a, g) => a + g.value * g.weight, 0);
     const avg = w > 0 ? pts / w : null;
     const target = getTarget();
     let need = null;
     if (w > 0 && w < 100) need = (target * 100 - pts) / (100 - w);
-    return { w, pts, avg, need, rest: Math.max(0, 100 - w) };
+    return { w, planned, pts, avg, need, nGraded: graded.length, rest: Math.max(0, 100 - w), unplanned: Math.max(0, 100 - planned) };
   }
   function overall() {
     let sum = 0, cr = 0, n = 0;
@@ -226,15 +233,15 @@
 
   function cardHTML(s) {
     const st = stats(s);
-    const over = st.w > 100.001;
-    const rows = s.grades.map((g, i) => `<tr>
+    const over = st.planned > 100.001;
+    const rows = s.grades.map((g, i) => `<tr${isGraded(g) ? '' : ' class="todo"'}>
         <td class="lbl"><span class="dot" style="background:${col(i)}"></span>${esc(g.label)}</td>
-        <td class="n">${fmt(g.value)}</td><td class="n">${fmtP(g.weight)} %</td>
+        <td class="n">${isGraded(g) ? fmt(g.value) : `<button class="pill" data-act="edit-grade" data-s="${s.id}" data-g="${g.id}">à venir</button>`}</td><td class="n">${fmtP(g.weight)} %</td>
         <td class="act"><button class="icon-btn" data-act="edit-grade" data-s="${s.id}" data-g="${g.id}" aria-label="Modifier ${esc(g.label)}">${ICON.edit}</button><button class="icon-btn" data-act="del-grade" data-s="${s.id}" data-g="${g.id}" aria-label="Supprimer ${esc(g.label)}">${ICON.del}</button></td>
       </tr>`).join('');
     return `<article class="card" data-id="${s.id}">
       <div class="card-head">
-        <div><h3>${esc(s.name)}</h3><div class="sub">${fmtP(s.credits)} crédit${s.credits > 1 ? 's' : ''} ECTS · ${s.grades.length} note${s.grades.length > 1 ? 's' : ''}</div></div>
+        <div><h3>${esc(s.name)}</h3><div class="sub">${fmtP(s.credits)} crédit${s.credits > 1 ? 's' : ''} ECTS · ${st.nGraded}/${s.grades.length} note${s.grades.length > 1 ? 's' : ''}</div></div>
         <div class="card-tools">
           <button class="icon-btn" data-act="edit-subject" data-s="${s.id}" aria-label="Modifier la matière">${ICON.edit}</button>
           <button class="icon-btn" data-act="del-subject" data-s="${s.id}" aria-label="Supprimer la matière">${ICON.del}</button>
@@ -244,17 +251,17 @@
         <div class="donut"><canvas id="c-${s.id}" role="img" aria-label="Répartition des notes de ${esc(s.name)}"></canvas>
           <div class="ctr"><span class="avg${st.avg != null && st.avg < getTarget() ? ' low' : ''}">${fmt(st.avg)}</span><small>/20</small></div></div>
         <div class="facts">
-          <div>Pourcentage saisi : <strong>${fmtP(st.w)} %</strong> sur 100 %</div>
-          <div class="meter${over ? ' over' : ''}"><span style="width:${Math.min(100, st.w)}%"></span></div>
-          ${over ? `<p class="warn">Attention : le total dépasse 100 % (${fmtP(st.w)} %).</p>` : needText(st)}
+          <div>Déjà noté : <strong>${fmtP(st.w)} %</strong> sur 100 %${st.planned > st.w ? ` <span class="muted">(${fmtP(st.planned)} % prévu)</span>` : ''}</div>
+          <div class="meter${over ? ' over' : ''}"><span style="width:${Math.min(100, st.w)}%"></span><i style="width:${Math.max(0, Math.min(100, st.planned) - Math.min(100, st.w))}%"></i></div>
+          ${over ? `<p class="warn">Attention : le total des évaluations dépasse 100 % (${fmtP(st.planned)} %).</p>` : needText(st)}
         </div>
       </div>
       ${s.grades.length ? `<table><thead><tr><th>Évaluation</th><th class="n">Note /20</th><th class="n">Poids</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
-        : '<p class="none">Pas encore de note. Ajoute la première ci-dessous.</p>'}
+        : '<p class="none">Pas encore d\'évaluation. Ajoute la première ci-dessous.</p>'}
       <form class="inline" data-s="${s.id}" novalidate>
         <label>Évaluation<input name="label" maxlength="100" placeholder="ex. Partiel"></label>
         <label>Note /20<input name="value" inputmode="decimal" placeholder="14,5" required></label>
-        <label>Poids %<input name="weight" inputmode="decimal" placeholder="${st.rest > 0 && st.rest < 100 ? fmtP(st.rest) : '40'}" required></label>
+        <label>Poids %<input name="weight" inputmode="decimal" placeholder="${st.unplanned > 0 && st.unplanned < 100 ? fmtP(st.unplanned) : '40'}" required></label>
         <button class="btn primary" type="submit">Ajouter</button>
       </form>
     </article>`;
@@ -263,9 +270,9 @@
   function donutConfig(s, { animate = true, forPdf = false } = {}) {
     const st = stats(s);
     const data = s.grades.map(g => g.weight);
-    const colors = s.grades.map((_, i) => col(i, forPdf));
-    const labels = s.grades.map(g => g.label);
-    if (st.rest > 0) { data.push(st.rest); colors.push(forPdf ? '#e3e8ee' : (isDark() ? '#2c4054' : REST)); labels.push('Non encore noté'); }
+    const colors = s.grades.map((g, i) => isGraded(g) ? col(i, forPdf) : col(i, forPdf) + '59');
+    const labels = s.grades.map(g => g.label + (isGraded(g) ? '' : ' (à venir)'));
+    if (st.unplanned > 0) { data.push(st.unplanned); colors.push(forPdf ? '#e3e8ee' : (isDark() ? '#2c4054' : REST)); labels.push('Non prévu'); }
     return {
       type: 'doughnut',
       data: { labels, datasets: [{ data, backgroundColor: colors, borderColor: forPdf ? '#ffffff' : (isDark() ? '#172634' : '#ffffff'), borderWidth: 2 }] },
@@ -279,7 +286,7 @@
             callbacks: {
               label: ctx => {
                 const g = s.grades[ctx.dataIndex];
-                return g ? ` ${fmt(g.value)}/20 · ${fmtP(g.weight)} %` : ` ${fmtP(st.rest)} % restants`;
+                return g ? (isGraded(g) ? ` ${fmt(g.value)}/20 · ${fmtP(g.weight)} %` : ` à venir · ${fmtP(g.weight)} %`) : ` ${fmtP(st.unplanned)} % non prévus`;
               }
             }
           }
@@ -361,10 +368,11 @@
         const ok = await dialog({
           title: 'Modifier la note',
           html: `<label class="field">Évaluation<input id="d-label" maxlength="100" value="${esc(g.label)}"></label>
-                 <label class="field">Note /20<input id="d-val" inputmode="decimal" value="${g.value}"></label>
+                 <label class="field">Note /20 <small>(laisse vide si pas encore reçue)</small><input id="d-val" inputmode="decimal" value="${isGraded(g) ? g.value : ''}"></label>
                  <label class="field">Poids %<input id="d-w" inputmode="decimal" value="${g.weight}"></label>`,
           read: async () => {
-            const data = checkGrade($('#d-label').value, parseNum($('#d-val').value), parseNum($('#d-w').value));
+            const raw = $('#d-val').value.trim();
+            const data = checkGrade($('#d-label').value, raw === '' ? null : parseNum(raw), parseNum($('#d-w').value), true);
             const grades = s.grades.map(x => x === g ? { ...g, ...data } : x);
             await store.saveGrades(s, grades);
             s.grades = grades;
@@ -425,6 +433,47 @@
   });
   document.addEventListener('click', e => { const m = $('.menu'); if (m && !m.contains(e.target)) m.remove(); });
 
+
+  // ---------- Modèles de semestre ----------
+  function openTemplate() {
+    const tpl = (window.SEMESTER_TEMPLATES || [])[0];
+    if (!tpl) return toast('Aucun modèle disponible.');
+    const have = new Set(state.subjects.map(s => s.name.trim().toLowerCase()));
+    const rows = tpl.subjects.map((m, i) => {
+      const exists = have.has(m.name.toLowerCase());
+      const ects = m.ects ?? m.ectsProvisoire;
+      const evals = m.evals.length ? m.evals.map(e => `${esc(e[0])} (${fmtP(e[1])} %)`).join(' · ') : 'Évaluations à compléter';
+      return `<li class="tpl-item${exists ? ' done' : ''}">
+        <label class="tpl-check"><input type="checkbox" data-i="${i}" ${exists ? 'disabled' : 'checked'}>
+          <span><strong>${esc(m.name)}</strong>${m.code ? ` <span class="muted">${esc(m.code)}</span>` : ''}${exists ? ' <span class="muted">— déjà ajoutée</span>' : ''}
+          <small>${evals}</small></span></label>
+        <label class="tpl-ects">ECTS<input data-e="${i}" inputmode="decimal" value="${ects}" ${exists ? 'disabled' : ''}>
+          ${m.ects == null ? '<em>à confirmer</em>' : '<em class="ok">confirmé</em>'}</label>
+      </li>`;
+    }).join('');
+    $('#dlg').classList.add('wide');
+    return dialog({
+      title: tpl.name, ok: 'Ajouter les matières',
+      html: `<p>${esc(tpl.note)}</p><ul class="tpl">${rows}</ul>
+             <p class="muted small">Les évaluations sont créées sans note (« à venir ») : clique dessus pour saisir ta note dès que tu la reçois.</p>`,
+      read: async () => {
+        const picks = [...document.querySelectorAll('.tpl input[type=checkbox]:checked')].map(c => Number(c.dataset.i));
+        if (!picks.length) throw new Error('Sélectionne au moins une matière.');
+        const items = picks.map(i => {
+          const m = tpl.subjects[i];
+          const data = checkSubject(m.name, parseNum(document.querySelector(`.tpl input[data-e="${i}"]`).value));
+          const grades = m.evals.map(([label, weight]) => ({ id: newId(), label, value: null, weight }));
+          return { data, grades };
+        });
+        let n = 0;
+        for (const it of items) { state.subjects.push(await store.addSubject(it.data, it.grades)); n++; }
+        return n;
+      }
+    }).then(n => { $('#dlg').classList.remove('wide'); if (n) { render(); toast(`${n} matière${n > 1 ? 's' : ''} ajoutée${n > 1 ? 's' : ''}`); } });
+  }
+  $('#btn-template').addEventListener('click', openTemplate);
+  $('#empty-template').addEventListener('click', openTemplate);
+
   // ---------- Export PDF ----------
   function donutImage(s) {
     const cv = document.createElement('canvas');
@@ -466,7 +515,7 @@
     doc.setTextColor(20);
     doc.autoTable({
       startY: 52, margin: { left: M, right: M },
-      head: [['Matière', 'ECTS', '% saisi', 'Moyenne /20']],
+      head: [['Matière', 'ECTS', '% noté', 'Moyenne /20']],
       body: state.subjects.map(s => { const st = stats(s); return [s.name, pdfNum(s.credits, 1), `${fmtP(st.w)} %`, pdfNum(st.avg)]; }),
       foot: [['Moyenne générale (pondérée ECTS)', pdfNum(o.credits, 1), '', pdfNum(o.avg)]],
       headStyles: { fillColor: deep }, footStyles: { fillColor: [235, 240, 245], textColor: 20 },
@@ -487,15 +536,15 @@
       doc.setTextColor(...(st.avg != null && st.avg < getTarget() ? acc : deep));
       doc.text(`${pdfNum(st.avg)} /20`, W - M, y + 3, { align: 'right' });
       doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); doc.setTextColor(90);
-      doc.text(`${pdfNum(s.credits, 1)} ECTS - ${fmtP(st.w)} % des évaluations saisies`, M, y + 9);
+      doc.text(`${pdfNum(s.credits, 1)} ECTS - ${fmtP(st.w)} % des évaluations notées`, M, y + 9);
 
       const top = y + 14;
       if (window.Chart && s.grades.length) doc.addImage(donutImage(s), 'PNG', M, top, 44, 44);
       doc.autoTable({
         startY: top, margin: { left: M + 52, right: M },
         head: [['', 'Évaluation', 'Note /20', 'Poids']],
-        body: s.grades.length ? s.grades.map(g => ['', g.label, pdfNum(g.value), `${fmtP(g.weight)} %`])
-          .concat(st.rest > 0 ? [['', 'Non encore noté', '-', `${fmtP(st.rest)} %`]] : [])
+        body: s.grades.length ? s.grades.map(g => ['', g.label, isGraded(g) ? pdfNum(g.value) : 'à venir', `${fmtP(g.weight)} %`])
+          .concat(st.unplanned > 0 ? [['', 'Non prévu', '-', `${fmtP(st.unplanned)} %`]] : [])
           : [['', 'Aucune note', '-', '-']],
         headStyles: { fillColor: [235, 240, 245], textColor: 40 },
         styles: { fontSize: 9.5, cellPadding: 2 },
@@ -503,7 +552,7 @@
         didDrawCell: d => {
           if (d.section === 'body' && d.column.index === 0) {
             const g = s.grades[d.row.index];
-            const c = g ? hexRgb(PALETTE[d.row.index % PALETTE.length]) : (s.grades.length ? [227, 232, 238] : null);
+            const c = g ? (isGraded(g) ? hexRgb(PALETTE[d.row.index % PALETTE.length]) : hexRgb(PALETTE[d.row.index % PALETTE.length]).map(v => Math.round(v * 0.35 + 255 * 0.65))) : (s.grades.length ? [227, 232, 238] : null);
             if (c) { doc.setFillColor(...c); doc.rect(d.cell.x + 1.5, d.cell.y + d.cell.height / 2 - 1.5, 3, 3, 'F'); }
           }
         }
