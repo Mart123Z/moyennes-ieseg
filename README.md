@@ -32,6 +32,11 @@ Dans Firebase, ouvre **Authentication**, puis **Paramètres** et **Domaines auto
 Le bouton **Template S1** ajoute d'un coup les matières du semestre 1 du PGE avec leurs évaluations et pondérations. Les notes sont créées « à venir » : l'étudiant les remplit au fil du semestre.
 Les données du modèle sont dans `templates.js` : pour corriger une pondération ou un crédit ECTS, modifie ce fichier (les ECTS `null` sont « à confirmer » et utilisent `ectsProvisoire`).
 
+## Import Aurion
+
+Bouton **Importer depuis Aurion (CSV)** : dans Aurion, « Mes notes aux épreuves » → export CSV, puis choisir le semestre et le fichier.
+Le site reconnaît chaque matière par son code (ex. `1728`) et chaque épreuve par sa clé (ex. `CONT1`). On peut réimporter un nouvel export à tout moment : les notes existantes sont mises à jour, rien n'est ajouté en double. Les valeurs non numériques (ABS…) sont ignorées.
+
 ## Mises à jour
 
 Modifie un fichier directement sur GitHub (✏️, puis **Commit changes**). Le site se met à jour tout seul en 1 à 2 minutes.
