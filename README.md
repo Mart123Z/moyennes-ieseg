@@ -37,6 +37,10 @@ Les données du modèle sont dans `templates.js` : pour corriger une pondératio
 Bouton **Importer depuis Aurion (CSV)** : dans Aurion, « Mes notes aux épreuves » → export CSV, puis choisir le semestre et le fichier.
 Le site reconnaît chaque matière par son code (ex. `1728`) et chaque épreuve par sa clé (ex. `CONT1`). On peut réimporter un nouvel export à tout moment : les notes existantes sont mises à jour, rien n'est ajouté en double. Les valeurs non numériques (ABS…) sont ignorées.
 
+## Évolution de la moyenne
+
+Chaque note a une date : celle choisie lors d'un ajout ou d'une modification manuelle, ou le jour de l'import pour les notes nouvelles ou modifiées par un CSV Aurion. Le graphique « Évolution de ta moyenne » recalcule la moyenne (générale ou d'une matière) à chacune de ces dates. Il apparaît aussi dans l'export PDF.
+
 ## Mises à jour
 
 Modifie un fichier directement sur GitHub (✏️, puis **Commit changes**). Le site se met à jour tout seul en 1 à 2 minutes.

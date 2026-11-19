@@ -110,6 +110,33 @@
     });
     return { avg: cr > 0 ? sum / cr : null, credits: cr, n };
   }
+  // ---------- Évolution dans le temps ----------
+  const todayISO = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); };
+  const validDate = v => /^\d{4}-\d{2}-\d{2}$/.test(v || '') && !isNaN(Date.parse(v)) ? v : null;
+  const fmtDate = (iso, long = false) => new Date(iso + 'T12:00:00').toLocaleDateString('fr-FR', long ? { day: 'numeric', month: 'long', year: 'numeric' } : { day: '2-digit', month: '2-digit' });
+  // Moyenne d'une matière / générale en ne comptant que les notes connues à la date D (les notes sans date comptent toujours)
+  function avgAt(s, D) {
+    const gs = s.grades.filter(g => isGraded(g) && (!g.date || g.date <= D));
+    const w = gs.reduce((a, g) => a + g.weight, 0);
+    return w > 0 ? gs.reduce((a, g) => a + g.value * g.weight, 0) / w : null;
+  }
+  function history(subjectId = 'all') {
+    const subs = subjectId === 'all' ? state.subjects : state.subjects.filter(s => s.id === subjectId);
+    const dates = [...new Set(subs.flatMap(s => s.grades.filter(g => isGraded(g) && g.date).map(g => g.date)))].sort();
+    const undated = subs.some(s => s.grades.some(g => isGraded(g) && !g.date));
+    if (!dates.length && undated) dates.push(todayISO());
+    return dates.map(D => {
+      let v;
+      if (subjectId !== 'all') v = avgAt(subs[0], D);
+      else {
+        let sum = 0, cr = 0;
+        subs.forEach(s => { const a = avgAt(s, D); if (a != null && s.credits > 0) { sum += a * s.credits; cr += s.credits; } });
+        v = cr > 0 ? sum / cr : null;
+      }
+      return { date: D, value: v };
+    }).filter(p => p.value != null);
+  }
+
   function getTarget() {
     const v = parseNum($('#target').value);
     return Number.isFinite(v) && v >= 0 && v <= 20 ? v : 10;
@@ -262,6 +289,7 @@
         <label>Évaluation<input name="label" maxlength="100" placeholder="ex. Partiel"></label>
         <label>Note /20<input name="value" inputmode="decimal" placeholder="14,5" required></label>
         <label>Poids %<input name="weight" inputmode="decimal" placeholder="${st.unplanned > 0 && st.unplanned < 100 ? fmtP(st.unplanned) : '40'}" required></label>
+        <label>Date<input name="date" type="date" value="${todayISO()}" max="${todayISO()}"></label>
         <button class="btn primary" type="submit">Ajouter</button>
       </form>
     </article>`;
@@ -295,9 +323,67 @@
     };
   }
 
+  function evoConfig(points, { forPdf = false } = {}) {
+    const dark = !forPdf && isDark();
+    const ink = dark ? '#9fb1c2' : '#506173', grid = dark ? '#26394b' : '#e3e8ee';
+    const line = dark ? '#7fb7d6' : '#16324f';
+    const target = getTarget();
+    const vals = points.map(p => p.value);
+    const lo = Math.max(0, Math.floor(Math.min(target, ...vals) - 1)), hi = Math.min(20, Math.ceil(Math.max(target, ...vals) + 1));
+    const ts = d => Date.parse(d + 'T12:00:00');
+    const xs = points.map(p => ts(p.date));
+    const DAY = 864e5, pad = Math.max(DAY, (xs[xs.length - 1] - xs[0]) * 0.03);
+    return {
+      type: 'line',
+      data: {
+        datasets: [
+          { label: 'Moyenne', data: points.map((p, i) => ({ x: xs[i], y: p.value })), borderColor: line, backgroundColor: line, pointBackgroundColor: vals.map(v => v < target ? '#e4572e' : line), pointRadius: forPdf ? 3 : 5, pointHoverRadius: 7, borderWidth: 3, tension: 0 },
+          { label: 'Objectif', data: [{ x: xs[0] - pad, y: target }, { x: xs[xs.length - 1] + pad, y: target }], borderColor: '#e4572e', borderDash: [6, 5], borderWidth: 1.5, pointRadius: 0, fill: false }
+        ]
+      },
+      options: {
+        responsive: !forPdf, maintainAspectRatio: false, animation: forPdf ? false : { duration: 400 },
+        interaction: { mode: 'nearest', axis: 'x', intersect: false },
+        scales: {
+          y: { min: lo, max: hi, ticks: { color: ink, stepSize: hi - lo > 8 ? 2 : 1 }, grid: { color: grid } },
+          x: { type: 'linear', min: xs[0] - pad, max: xs[xs.length - 1] + pad, grid: { display: false },
+               ticks: { color: ink, maxRotation: 0, maxTicksLimit: forPdf ? 8 : 6, callback: v => new Date(v).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' }) } }
+        },
+        plugins: {
+          legend: { display: false },
+          tooltip: { enabled: !forPdf, filter: it => it.datasetIndex === 0, callbacks: {
+            title: items => fmtDate(points[items[0].dataIndex].date, true),
+            label: ctx => ` Moyenne : ${fmt(ctx.parsed.y)}/20`
+          } }
+        }
+      }
+    };
+  }
+  function renderEvolution() {
+    const sel = $('#evo-subject');
+    const cur = sel.value || 'all';
+    sel.innerHTML = '<option value="all">Moyenne générale</option>' + state.subjects.map(s => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('');
+    sel.value = [...sel.options].some(o => o.value === cur) ? cur : 'all';
+    const pts = history(sel.value);
+    $('#evo').hidden = !state.subjects.some(s => s.grades.some(isGraded));
+    const box = $('#evo-fig');
+    if (state.evo) { state.evo.destroy(); state.evo = null; }
+    if (pts.length < 2) {
+      box.hidden = true;
+      $('#evo-note').textContent = pts.length ? `Un seul point pour l'instant (${fmtDate(pts[0].date, true)} : ${fmt(pts[0].value)}/20). Chaque note ajoutée à une autre date, ou chaque nouvel import Aurion, ajoutera un point.` : '';
+      return;
+    }
+    box.hidden = false;
+    const first = pts[0].value, last = pts[pts.length - 1].value, diff = last - first;
+    $('#evo-note').innerHTML = `${pts.length} points, du ${fmtDate(pts[0].date, true)} au ${fmtDate(pts[pts.length - 1].date, true)} : <strong class="${diff >= 0 ? 'up' : 'down'}">${diff >= 0 ? '+' : '−'}${fmt(Math.abs(diff))} pt</strong>`;
+    if (window.Chart) state.evo = new Chart($('#evo-canvas'), evoConfig(pts));
+  }
+  $('#evo-subject').addEventListener('change', renderEvolution);
+
   function render() {
     destroyCharts();
     renderSummary();
+    renderEvolution();
     $('#empty').hidden = state.subjects.length > 0;
     $('#cards').innerHTML = state.subjects.map(cardHTML).join('');
     const animate = !matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -330,7 +416,7 @@
     try {
       const body = { label: F('label').value, value: parseNum(F('value').value), weight: parseNum(F('weight').value) };
       if (!F('value').value.trim() || !F('weight').value.trim()) throw new Error('Renseigne la note et son pourcentage.');
-      const grade = { id: newId(), ...checkGrade(body.label, body.value, body.weight) };
+      const grade = { id: newId(), ...checkGrade(body.label, body.value, body.weight), date: validDate(F('date').value) || todayISO() };
       if (s.grades.length >= 50) throw new Error('50 notes maximum par matière.');
       const grades = [...s.grades, grade];
       await store.saveGrades(s, grades);
@@ -369,11 +455,13 @@
           title: 'Modifier la note',
           html: `<label class="field">Évaluation<input id="d-label" maxlength="100" value="${esc(g.label)}"></label>
                  <label class="field">Note /20 <small>(laisse vide si pas encore reçue)</small><input id="d-val" inputmode="decimal" value="${isGraded(g) ? g.value : ''}"></label>
-                 <label class="field">Poids %<input id="d-w" inputmode="decimal" value="${g.weight}"></label>`,
+                 <label class="field">Poids %<input id="d-w" inputmode="decimal" value="${g.weight}"></label>
+                 <label class="field">Date de la note<input id="d-date" type="date" value="${g.date || todayISO()}" max="${todayISO()}"></label>`,
           read: async () => {
             const raw = $('#d-val').value.trim();
             const data = checkGrade($('#d-label').value, raw === '' ? null : parseNum(raw), parseNum($('#d-w').value), true);
-            const grades = s.grades.map(x => x === g ? { ...g, ...data } : x);
+            const date = data.value === null ? null : (validDate($('#d-date').value) || todayISO());
+            const grades = s.grades.map(x => x === g ? { ...g, ...data, date } : x);
             await store.saveGrades(s, grades);
             s.grades = grades;
             return true;
@@ -518,6 +606,7 @@
   }
   // Construit le plan d'import sans rien enregistrer
   function planImport(rows) {
+    const importDate = todayISO();
     const work = new Map(); // id (ou "new:<code>") -> { subject, grades, isNew, tpl }
     const changes = [];
     const tplNames = new Map();
@@ -552,9 +641,10 @@
       if (g) {
         action = g.value == null ? 'new' : (g.value === r.value && g.weight === r.weight ? 'same' : 'update');
         changes.push({ entry, r, action, old: g.value, label: g.label });
+        if (action !== 'same') g.date = importDate;
         Object.assign(g, { value: r.value, weight: r.weight, src: r.src });
       } else {
-        G.push({ id: newId(), label: r.evalLabel, value: r.value, weight: r.weight, src: r.src });
+        G.push({ id: newId(), label: r.evalLabel, value: r.value, weight: r.weight, src: r.src, date: importDate });
         changes.push({ entry, r, action: 'new', old: null, label: r.evalLabel });
       }
     }
@@ -672,6 +762,22 @@
       columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right', fontStyle: 'bold' } },
       styles: { fontSize: 10, cellPadding: 2.4 }
     });
+
+    // Évolution de la moyenne générale
+    const evoPts = history('all');
+    let yEvo = doc.lastAutoTable.finalY + 10;
+    if (window.Chart && evoPts.length >= 2) {
+      if (yEvo + 70 > 285) { doc.addPage(); yEvo = 18; }
+      const cv = document.createElement('canvas');
+      cv.width = 1000; cv.height = 360; cv.style.cssText = 'position:fixed;left:-9999px;top:0;width:1000px;height:360px';
+      document.body.appendChild(cv);
+      const ch = new Chart(cv, evoConfig(evoPts, { forPdf: true }));
+      const img = cv.toDataURL('image/png'); ch.destroy(); cv.remove();
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(12); doc.setTextColor(20);
+      doc.text('Évolution de la moyenne générale', M, yEvo);
+      doc.addImage(img, 'PNG', M, yEvo + 3, W - 2 * M, (W - 2 * M) * 0.36);
+      doc.lastAutoTable.finalY = yEvo + 3 + (W - 2 * M) * 0.36;
+    }
 
     // Détail par matière
     let y = doc.lastAutoTable.finalY + 12;
