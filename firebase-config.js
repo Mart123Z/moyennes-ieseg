@@ -1,10 +1,10 @@
-// Colle ici la configuration de TON projet Firebase
-// (Console Firebase > Paramètres du projet > Vos applications > Application Web > Config).
+// Configuration du projet Firebase « moyennes-ieseg ».
+// Ces valeurs ne sont pas secrètes : la sécurité repose sur les règles Firestore (firestore.rules).
 window.FIREBASE_CONFIG = {
-  apiKey: "A_REMPLACER",
-  authDomain: "A_REMPLACER.firebaseapp.com",
-  projectId: "A_REMPLACER",
-  storageBucket: "A_REMPLACER.firebasestorage.app",
-  messagingSenderId: "A_REMPLACER",
-  appId: "A_REMPLACER"
+  apiKey: "AIzaSyCaG2Vb39Yb9EkcFYjuhcl-iBL916NO5ig",
+  authDomain: "moyennes-ieseg.firebaseapp.com",
+  projectId: "moyennes-ieseg",
+  storageBucket: "moyennes-ieseg.firebasestorage.app",
+  messagingSenderId: "84711320060",
+  appId: "1:84711320060:web:2fb06399754bf495ab2a79"
 };
