@@ -202,6 +202,25 @@ dialog{max-height:calc(100dvh - 24px);overflow:auto}
   .tpl{max-height:42dvh}
   .tpl-item{grid-template-columns:1fr;gap:8px}
   .tpl-ects{grid-template-columns:auto 90px auto;align-items:center;gap:8px}
-  .add-head .btn{width:100%}
+  
   #dlg-form{padding:18px}
 }
+
+/* Import Aurion */
+.add-actions,.empty-actions{display:flex;gap:8px;flex-wrap:wrap}
+.empty-actions{justify-content:center}
+select{height:44px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);padding:0 10px;font-size:16px}
+input[type=file]{font-size:14px;padding:8px 0}
+.imp{list-style:none;margin:0;padding:0;display:grid;gap:10px;max-height:min(50dvh,480px);overflow:auto}
+.imp li{border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+.imp-h{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:4px}
+.tag{font-size:12px;font-weight:600;color:var(--accent);border:1px solid var(--accent);border-radius:999px;padding:1px 8px}
+.imp-ects{display:flex;gap:6px;align-items:center;font-size:13px;color:var(--muted);margin-left:auto}
+.imp-ects input{width:70px;height:34px;border:1px solid var(--line);border-radius:8px;padding:0 8px;background:var(--bg);color:var(--ink);font-size:16px}
+.imp-t{font-size:14px}.imp-t td{padding:4px}
+.imp-t tr.same td{color:var(--muted)}
+.imp-t tr.new td:last-child{color:var(--ok);font-weight:600}
+.imp-t tr.update td:last-child{color:var(--accent);font-weight:600}
+@media (max-width:600px){.add-actions,.add-actions .btn{width:100%}}
+.imp-t{table-layout:fixed}.imp-t td:nth-child(2),.imp-t td:nth-child(3){width:72px}.imp-t td:nth-child(4){width:150px}
+@media (max-width:600px){.imp-t td:nth-child(4){width:96px}}

@@ -77,7 +77,8 @@
     <section class="band">
       <form class="add-subject" id="add-subject" novalidate>
         <div class="add-head"><h2>Ajouter une matière</h2>
-          <button type="button" class="btn ghost" id="btn-template">Template S1 (Bachelor 1)</button></div>
+          <div class="add-actions"><button type="button" class="btn ghost" id="btn-import">Importer depuis Aurion (CSV)</button>
+          <button type="button" class="btn ghost" id="btn-template">Template S1 (Bachelor 1)</button></div></div>
         <div class="row">
           <label class="field grow">Nom de la matière
             <input id="s-name" maxlength="100" placeholder="ex. Finance d'entreprise" required>
@@ -94,7 +95,8 @@
         <p><strong>Aucune matière pour l'instant.</strong></p>
         <p>Ajoute ta première matière ci-dessus, puis tes notes avec leur pourcentage (ex. Partiel 40 %, Contrôle continu 30 %…).</p>
         <p>En 1re année du PGE ? Charge directement toutes les matières du S1 avec leurs pondérations :</p>
-        <button type="button" class="btn primary" id="empty-template">Utiliser le template S1</button>
+        <div class="empty-actions"><button type="button" class="btn primary" id="empty-import">Importer mes notes Aurion</button>
+        <button type="button" class="btn ghost" id="empty-template">Utiliser le template S1</button></div>
       </div>
     </section>
 

@@ -132,7 +132,7 @@
           cleanup(); d.close(); resolve(val);
         } catch (err) { $('#dlg-error').textContent = err.message; }
       };
-      const onClose = () => { cleanup(); resolve(null); };
+      const onClose = () => { if (d.open) return; cleanup(); resolve(null); };
       const cleanup = () => { $('#dlg-form').removeEventListener('submit', onSubmit); d.removeEventListener('close', onClose); };
       $('#dlg-form').addEventListener('submit', onSubmit);
       d.addEventListener('close', onClose);
@@ -473,6 +473,156 @@
   }
   $('#btn-template').addEventListener('click', openTemplate);
   $('#empty-template').addEventListener('click', openTemplate);
+
+  // ---------- Import Aurion (CSV « Mes notes aux épreuves ») ----------
+  const norm = t => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  const FIX = [[/Contr�le/g, 'Contrôle'], [/�preuve/g, 'épreuve'], [/�valuation/g, 'évaluation'], [/Ma�trise/g, 'Maîtrise'], [/�/g, 'é']];
+  const fixText = t => FIX.reduce((a, [r, v]) => a.replace(r, v), t);
+  const TYPE_WORDS = {
+    MIDT: ['partiel', 'midterm', 'mi parcours'], MCQ: ['qcm', 'mcq', 'quiz'], EXERC: ['exercice', 'test', 'devoir', 'grammar'],
+    CONT: ['controle continu', 'cont', 'presentation', 'cc'], PARTN: ['participation'], GPROJ: ['groupe', 'projet', 'presentation orale'],
+    EXAM: ['final', 'examen'], FINAL: ['final', 'examen'], ORAL: ['oral', 'presentation'], REPORT: ['rapport'], PROJ: ['projet']
+  };
+  function decodeFile(buf) {
+    try { return new TextDecoder('utf-8', { fatal: true }).decode(buf); }
+    catch { return new TextDecoder('windows-1252').decode(buf); }
+  }
+  const prettyCourse = t => { const x = fixText(t).replace(/_/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase().replace(/\bba s(\d)\b/g, 'BA S$1').replace(/\b(i{1,3})$/, m => m.toUpperCase()); return x.charAt(0).toUpperCase() + x.slice(1); };
+  function parseAurion(text) {
+    const lines = text.replace(/^﻿/, '').split(/\r?\n/).filter(l => l.trim());
+    if (!lines.length || !/^"?note"?;/i.test(lines[0].trim())) throw new Error("Ce fichier ne ressemble pas à l'export Aurion « Mes notes aux épreuves » (CSV).");
+    const rows = [], skipped = [];
+    for (const line of lines.slice(1)) {
+      const c = line.split(';').map(x => x.trim().replace(/^"(.*)"$/, '$1'));
+      const [noteS, coefS, , code, libelle = ''] = c;
+      if (!code) continue;
+      const parts = code.split('_');
+      const key = parts[parts.length - 1], course = parts[parts.length - 2];
+      const sem = (parts.find(x => /^S\d$/.test(x)) || '').toUpperCase();
+      const lib = fixText(libelle).split(' - ').map(x => x.trim()).filter(Boolean);
+      const evalLabel = lib.length > 1 ? lib[lib.length - 1] : key;
+      const courseName = prettyCourse((lib[0] || course).replace(new RegExp('\\s*' + course + '\\s*$'), ''));
+      const value = Number(String(noteS).replace(',', '.'));
+      const weight = Number(String(coefS).replace(',', '.'));
+      if (!/^\d{3,4}$/.test(course) || !key) { skipped.push(libelle || code); continue; }
+      if (!Number.isFinite(value) || value < 0 || value > 20 || !Number.isFinite(weight) || weight <= 0 || weight > 100) {
+        skipped.push(`${courseName} – ${evalLabel} (${noteS.trim() || 'sans note'})`); continue;
+      }
+      rows.push({ sem, course, key, src: `${course}_${key}`, courseName, evalLabel, value: round2(value), weight: round2(weight) });
+    }
+    return { rows, skipped };
+  }
+  function tplByCode(code) {
+    for (const t of window.SEMESTER_TEMPLATES || []) { const m = t.subjects.find(x => x.code === code); if (m) return m; }
+    return null;
+  }
+  // Construit le plan d'import sans rien enregistrer
+  function planImport(rows) {
+    const work = new Map(); // id (ou "new:<code>") -> { subject, grades, isNew, tpl }
+    const changes = [];
+    const tplNames = new Map();
+    for (const r of rows) {
+      const tpl = tplByCode(r.course);
+      let entry = [...work.values()].find(e => e.code === r.course);
+      if (!entry) {
+        let subj = state.subjects.find(s => s.grades.some(g => g.src && g.src.split('_')[0] === r.course))
+          || (tpl && state.subjects.find(s => norm(s.name) === norm(tpl.name)))
+          || state.subjects.find(s => norm(s.name) === norm(r.courseName));
+        if (subj) entry = { code: r.course, subject: subj, grades: subj.grades.map(g => ({ ...g })), isNew: false, tpl };
+        else entry = {
+          code: r.course, isNew: true, tpl,
+          subject: { name: tpl ? tpl.name : r.courseName, credits: tpl ? (tpl.ects ?? tpl.ectsProvisoire) : 2 },
+          grades: tpl ? tpl.evals.map(([label, weight]) => ({ id: newId(), label, value: null, weight })) : []
+        };
+        work.set(r.course, entry);
+      }
+      const G = entry.grades;
+      let g = G.find(x => x.src === r.src);
+      if (!g && entry.tpl) {
+        const te = entry.tpl.evals.find(e => e[2] === r.key);
+        if (te) g = G.find(x => !x.src && norm(x.label) === norm(te[0]));
+      }
+      if (!g) {
+        const type = r.key.replace(/\d+$/, '');
+        const words = TYPE_WORDS[type] || [];
+        const fits = x => !x.src && x.value == null && words.some(w => norm(x.label).includes(w));
+        g = G.find(x => fits(x) && x.weight === r.weight) || null;
+      }
+      let action;
+      if (g) {
+        action = g.value == null ? 'new' : (g.value === r.value && g.weight === r.weight ? 'same' : 'update');
+        changes.push({ entry, r, action, old: g.value, label: g.label });
+        Object.assign(g, { value: r.value, weight: r.weight, src: r.src });
+      } else {
+        G.push({ id: newId(), label: r.evalLabel, value: r.value, weight: r.weight, src: r.src });
+        changes.push({ entry, r, action: 'new', old: null, label: r.evalLabel });
+      }
+    }
+    return { entries: [...work.values()], changes };
+  }
+
+  async function openImport() {
+    const sems = ['S1', 'S2'];
+    const parsed = await dialog({
+      title: 'Importer mes notes depuis Aurion',
+      ok: 'Analyser le fichier',
+      html: `<p>Dans Aurion, ouvre <strong>Mes notes aux épreuves</strong> et exporte le tableau en CSV, puis choisis ce fichier ici. Tu peux réimporter un nouvel export à chaque nouvelle note : rien n'est ajouté en double.</p>
+        <label class="field">Semestre<select id="imp-sem">${sems.map(x => `<option value="${x}">${x}</option>`).join('')}</select></label>
+        <label class="field">Fichier CSV exporté d'Aurion<input id="imp-file" type="file" accept=".csv,text/csv,.txt"></label>`,
+      read: async () => {
+        const f = $('#imp-file').files[0];
+        if (!f) throw new Error('Choisis le fichier CSV exporté depuis Aurion.');
+        if (f.size > 2e6) throw new Error('Fichier trop volumineux.');
+        const { rows, skipped } = parseAurion(decodeFile(await f.arrayBuffer()));
+        const sem = $('#imp-sem').value;
+        const keep = rows.filter(r => r.sem === sem);
+        if (!keep.length) throw new Error(`Aucune note du ${sem} dans ce fichier.`);
+        return { rows: keep, skipped, sem, other: rows.length - keep.length };
+      }
+    });
+    if (!parsed) return;
+    const plan = planImport(parsed.rows);
+    const label = { new: 'nouvelle', update: 'mise à jour', same: 'inchangée' };
+    const count = k => plan.changes.filter(c => c.action === k).length;
+    const groups = plan.entries.map((e, i) => {
+      const lines = plan.changes.filter(c => c.entry === e).map(c => `<tr class="${c.action}"><td>${esc(c.label)}</td><td class="n">${fmt(c.r.value)}</td><td class="n">${fmtP(c.r.weight)} %</td>
+        <td>${label[c.action]}${c.action === 'update' ? ` <span class="muted">(${fmt(c.old)})</span>` : ''}</td></tr>`).join('');
+      return `<li><div class="imp-h"><strong>${esc(e.subject.name)}</strong>${e.isNew ? `<span class="tag">nouvelle matière</span>
+        <label class="imp-ects">ECTS <input data-n="${i}" inputmode="decimal" value="${e.subject.credits}"></label>` : ''}</div>
+        <table class="imp-t"><tbody>${lines}</tbody></table></li>`;
+    }).join('');
+    $('#dlg').classList.add('wide');
+    const n = await dialog({
+      title: `Import Aurion – ${parsed.sem}`,
+      ok: count('new') + count('update') ? 'Enregistrer les notes' : 'Fermer',
+      html: `<p><strong>${count('new')}</strong> nouvelle(s) note(s), <strong>${count('update')}</strong> mise(s) à jour, ${count('same')} inchangée(s).</p>
+        ${parsed.skipped.length ? `<p class="warn">Ignoré : ${parsed.skipped.map(esc).join(' · ')}</p>` : ''}
+        ${parsed.other ? `<p class="muted small">${parsed.other} note(s) d'un autre semestre ignorée(s).</p>` : ''}
+        <ul class="imp">${groups}</ul>
+        ${plan.entries.some(e => e.isNew) ? '<p class="muted small">Les nouvelles matières sont créées avec le modèle du S1 quand il existe. Vérifie leurs crédits ECTS.</p>' : ''}`,
+      read: async () => {
+        let saved = 0;
+        for (const [i, e] of plan.entries.entries()) {
+          const changed = plan.changes.some(c => c.entry === e && c.action !== 'same');
+          if (!changed) continue;
+          if (e.grades.length > 50) throw new Error(`Trop d'évaluations pour ${e.subject.name}.`);
+          if (e.isNew) {
+            const data = checkSubject(e.subject.name, parseNum(document.querySelector(`.imp input[data-n="${i}"]`).value));
+            state.subjects.push(await store.addSubject(data, e.grades));
+          } else {
+            await store.saveGrades(e.subject, e.grades);
+            e.subject.grades = e.grades;
+          }
+          saved++;
+        }
+        return saved;
+      }
+    });
+    $('#dlg').classList.remove('wide');
+    if (n) { render(); toast(`Notes importées (${n} matière${n > 1 ? 's' : ''})`); }
+  }
+  $('#btn-import').addEventListener('click', () => openImport().catch(err => toast(err.message)));
+  $('#empty-import').addEventListener('click', () => openImport().catch(err => toast(err.message)));
 
   // ---------- Export PDF ----------
   function donutImage(s) {
