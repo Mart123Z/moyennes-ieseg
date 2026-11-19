@@ -1,0 +1,16 @@
+{
+  "name": "moyennes-ieseg",
+  "description": "Moyennes IESEG — version Firebase (gratuite)",
+  "scripts": {
+    "build": "esbuild src/firebase-entry.js --bundle --minify --format=iife --global-name=fb --target=es2020 --outfile=public/vendor/firebase.js",
+    "deploy": "firebase deploy"
+  },
+  "devDependencies": {
+    "chart.js": "^4.6.1",
+    "esbuild": "^0.28.2",
+    "firebase": "^12.19.0",
+    "jspdf": "^2.5.2",
+    "jspdf-autotable": "^3.8.4"
+  },
+  "private": true
+}
