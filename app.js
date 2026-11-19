@@ -568,7 +568,7 @@
       ok: 'Analyser le fichier',
       html: `<p>Dans Aurion, ouvre <strong>Mes notes aux épreuves</strong> et exporte le tableau en CSV, puis choisis ce fichier ici. Tu peux réimporter un nouvel export à chaque nouvelle note : rien n'est ajouté en double.</p>
         <label class="field">Semestre<select id="imp-sem">${sems.map(x => `<option value="${x}">${x}</option>`).join('')}</select></label>
-        <label class="field">Fichier CSV exporté d'Aurion<input id="imp-file" type="file" accept=".csv,text/csv,.txt"></label>`,
+        <label class="field">Fichier exporté d'Aurion <small>(même si son nom ne finit pas par .csv)</small><input id="imp-file" type="file"></label>`,
       read: async () => {
         const f = $('#imp-file').files[0];
         if (!f) throw new Error('Choisis le fichier CSV exporté depuis Aurion.');
