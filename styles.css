@@ -238,3 +238,14 @@ input[type=file]{font-size:14px;padding:8px 0}
 .inline label:nth-of-type(4){grid-column:1/2}
 .inline .btn{grid-column:2/-1}
 @media (max-width:600px){.evo-fig{height:220px;min-height:220px}.evo-head select{width:100%}.inline{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.inline label:nth-of-type(4),.inline .btn{grid-column:1/-1}}
+
+/* Tutoriel vidéo */
+#tuto{width:min(1000px,calc(100vw - 24px));padding:0;background:#0f1d2b;color:#fff;overflow:hidden}
+#tuto::backdrop{background:rgba(5,12,20,.75)}
+.tuto-head{display:flex;justify-content:space-between;align-items:center;padding:12px 12px 12px 20px}
+.tuto-head h3{font-size:18px}
+.tuto-head .icon-btn{color:#cfe6f2;font-size:18px}
+.tuto-head .icon-btn:hover{background:rgba(255,255,255,.1);color:#fff}
+#tuto video{display:block;width:100%;height:auto;aspect-ratio:16/9;background:#16324f}
+.tuto-link{justify-self:start;padding:0;min-height:36px;color:var(--deep);font-weight:600;text-decoration:none}
+:root .tuto-link{color:light-dark(#16324f,#7fb7d6)}

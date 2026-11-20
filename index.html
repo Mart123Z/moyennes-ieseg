@@ -105,6 +105,7 @@
         <p>Ajoute ta première matière ci-dessus, puis tes notes avec leur pourcentage (ex. Partiel 40 %, Contrôle continu 30 %…).</p>
         <p>En 1re année du PGE ? Charge directement toutes les matières du S1 avec leurs pondérations :</p>
         <div class="empty-actions"><button type="button" class="btn primary" id="empty-import">Importer mes notes Aurion</button>
+        <button type="button" class="btn ghost" data-tuto>▶ Voir le tutoriel (1 min)</button>
         <button type="button" class="btn ghost" id="empty-template">Utiliser le template S1</button></div>
       </div>
     </section>
@@ -125,6 +126,14 @@
         <button class="btn primary" value="ok" id="dlg-ok">OK</button>
       </div>
     </form>
+  </dialog>
+
+  <!-- Tutoriel vidéo -->
+  <dialog id="tuto">
+    <div class="tuto-head"><h3>Importer ses notes depuis Aurion</h3><button class="icon-btn" id="tuto-close" aria-label="Fermer">✕</button></div>
+    <video id="tuto-video" controls playsinline preload="none" poster="media/tutoriel-poster.jpg">
+      <source src="media/tutoriel-import-aurion.mp4" type="video/mp4">
+    </video>
   </dialog>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>

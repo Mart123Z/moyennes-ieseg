@@ -656,7 +656,8 @@
     const parsed = await dialog({
       title: 'Importer mes notes depuis Aurion',
       ok: 'Analyser le fichier',
-      html: `<p>Dans Aurion, ouvre <strong>Mes notes aux épreuves</strong> et exporte le tableau en CSV, puis choisis ce fichier ici. Tu peux réimporter un nouvel export à chaque nouvelle note : rien n'est ajouté en double.</p>
+      html: `<p>Dans Aurion : <strong>Ma scolarité → Cours → Mes notes aux épreuves – année courante</strong>, puis <strong>Exporter → CSV pour Microsoft Excel</strong>. Choisis ensuite ce fichier ici. Tu peux réimporter un nouvel export à chaque nouvelle note : rien n'est ajouté en double.</p>
+        <button type="button" class="link tuto-link" data-tuto>▶ Voir le tutoriel vidéo (1 min)</button>
         <label class="field">Semestre<select id="imp-sem">${sems.map(x => `<option value="${x}">${x}</option>`).join('')}</select></label>
         <label class="field">Fichier exporté d'Aurion <small>(même si son nom ne finit pas par .csv)</small><input id="imp-file" type="file"></label>`,
       read: async () => {
@@ -711,6 +712,18 @@
     $('#dlg').classList.remove('wide');
     if (n) { render(); toast(`Notes importées (${n} matière${n > 1 ? 's' : ''})`); }
   }
+  // Tutoriel vidéo
+  document.addEventListener('click', e => {
+    if (!e.target.closest('[data-tuto]')) return;
+    e.preventDefault();
+    $('#tuto').showModal();
+    $('#tuto-video').play().catch(() => {});
+  });
+  const closeTuto = () => { $('#tuto-video').pause(); if ($('#tuto').open) $('#tuto').close(); };
+  $('#tuto-close').addEventListener('click', closeTuto);
+  $('#tuto').addEventListener('close', () => $('#tuto-video').pause());
+  $('#tuto').addEventListener('click', e => { if (e.target === $('#tuto')) closeTuto(); });
+
   $('#btn-import').addEventListener('click', () => openImport().catch(err => toast(err.message)));
   $('#empty-import').addEventListener('click', () => openImport().catch(err => toast(err.message)));
 
