@@ -62,6 +62,15 @@
       </div>
     </header>
 
+    <nav class="sems" id="sems" aria-label="Semestres">
+      <button type="button" class="sem on" data-sem="S1" aria-current="page">S1</button>
+      <button type="button" class="sem" data-sem="S2" aria-disabled="true" title="Bientôt disponible">S2</button>
+      <button type="button" class="sem" data-sem="S3" aria-disabled="true" title="Bientôt disponible">S3</button>
+      <button type="button" class="sem" data-sem="S4" aria-disabled="true" title="Bientôt disponible">S4</button>
+      <button type="button" class="sem" data-sem="S5" aria-disabled="true" title="Bientôt disponible">S5</button>
+      <button type="button" class="sem" data-sem="S6" aria-disabled="true" title="Bientôt disponible">S6</button>
+    </nav>
+
     <section class="band summary">
       <div class="sum-main">
         <p class="eyebrow">Moyenne générale</p>
@@ -74,13 +83,20 @@
       <div class="sum-bars" id="sum-bars"></div>
     </section>
 
-    <section class="band evo" id="evo" hidden>
-      <div class="evo-head">
-        <h2>Évolution de ta moyenne</h2>
-        <select id="evo-subject" aria-label="Moyenne affichée"></select>
+    <section class="band charts" id="charts" hidden>
+      <div class="chart-card evo-card">
+        <div class="evo-head">
+          <h2>Évolution de ta moyenne</h2>
+          <select id="evo-subject" aria-label="Moyenne affichée"></select>
+        </div>
+        <p class="evo-note" id="evo-note"></p>
+        <div class="fig evo-fig" id="evo-fig"><canvas id="evo-canvas" role="img" aria-label="Évolution de la moyenne dans le temps"></canvas></div>
       </div>
-      <p class="evo-note" id="evo-note"></p>
-      <div class="fig evo-fig" id="evo-fig"><canvas id="evo-canvas" role="img" aria-label="Évolution de la moyenne dans le temps"></canvas></div>
+      <div class="chart-card radar-card">
+        <h2>Moyenne par matière</h2>
+        <p class="evo-note" id="radar-note"></p>
+        <div class="radar-fig" id="radar-fig"><canvas id="radar-canvas" role="img" aria-label="Toile d'araignée des moyennes par matière"></canvas></div>
+      </div>
     </section>
 
     <section class="band">

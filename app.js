@@ -258,6 +258,19 @@
     return `<p class="need">Pour finir à ${t}/20, il te faut <strong>${fmt(st.need)}/20</strong> en moyenne sur les ${fmtP(st.rest)} % restants.</p>`;
   }
 
+  function sparkHTML(s) {
+    const pts = history(s.id);
+    if (pts.length < 2) return '';
+    const W = 200, H = 44, vs = pts.map(p => p.value);
+    const lo = Math.min(...vs, getTarget()) - 0.5, hi = Math.max(...vs, getTarget()) + 0.5;
+    const ts = pts.map(p => Date.parse(p.date + 'T12:00:00')), t0 = ts[0], t1 = ts[ts.length - 1];
+    const X = t => 4 + (t - t0) / ((t1 - t0) || 1) * (W - 8), Y = v => H - 4 - (v - lo) / (hi - lo) * (H - 8);
+    const d = pts.map((p, i) => `${i ? 'L' : 'M'}${X(ts[i]).toFixed(1)} ${Y(p.value).toFixed(1)}`).join('');
+    const diff = vs[vs.length - 1] - vs[0];
+    return `<div class="spark"><span>Évolution</span>
+      <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-label="Évolution de la moyenne de ${esc(s.name)}"><line x1="0" x2="${W}" y1="${Y(getTarget()).toFixed(1)}" y2="${Y(getTarget()).toFixed(1)}" class="sp-t"/><path d="${d}" class="sp-l"/></svg>
+      <strong class="${diff >= 0 ? 'up' : 'down'}">${diff >= 0 ? '+' : '−'}${fmt(Math.abs(diff))}</strong></div>`;
+  }
   function cardHTML(s) {
     const st = stats(s);
     const over = st.planned > 100.001;
@@ -280,6 +293,7 @@
         <div class="facts">
           <div>Déjà noté : <strong>${fmtP(st.w)} %</strong> sur 100 %${st.planned > st.w ? ` <span class="muted">(${fmtP(st.planned)} % prévu)</span>` : ''}</div>
           <div class="meter${over ? ' over' : ''}"><span style="width:${Math.min(100, st.w)}%"></span><i style="width:${Math.max(0, Math.min(100, st.planned) - Math.min(100, st.w))}%"></i></div>
+          ${sparkHTML(s)}
           ${over ? `<p class="warn">Attention : le total des évaluations dépasse 100 % (${fmtP(st.planned)} %).</p>` : needText(st)}
         </div>
       </div>
@@ -323,67 +337,141 @@
     };
   }
 
-  function evoConfig(points, { forPdf = false } = {}) {
+  // series : [{ label, color, points:[{date,value}] }] — une seule série = moyenne (points rouges sous l'objectif)
+  function evoConfig(series, { forPdf = false } = {}) {
     const dark = !forPdf && isDark();
     const ink = dark ? '#9fb1c2' : '#506173', grid = dark ? '#26394b' : '#e3e8ee';
-    const line = dark ? '#7fb7d6' : '#16324f';
+    const main = dark ? '#7fb7d6' : '#16324f';
     const target = getTarget();
-    const vals = points.map(p => p.value);
-    const lo = Math.max(0, Math.floor(Math.min(target, ...vals) - 1)), hi = Math.min(20, Math.ceil(Math.max(target, ...vals) + 1));
+    const single = series.length === 1;
     const ts = d => Date.parse(d + 'T12:00:00');
-    const xs = points.map(p => ts(p.date));
-    const DAY = 864e5, pad = Math.max(DAY, (xs[xs.length - 1] - xs[0]) * 0.03);
+    const all = series.flatMap(s => s.points);
+    const vals = all.map(p => p.value), xs = all.map(p => ts(p.date));
+    const x0 = Math.min(...xs), x1 = Math.max(...xs);
+    const lo = Math.max(0, Math.floor(Math.min(target, ...vals) - 1)), hi = Math.min(20, Math.ceil(Math.max(target, ...vals) + 1));
+    const pad = Math.max(864e5, (x1 - x0) * 0.03);
+    const datasets = series.map(s => {
+      const c = single ? main : s.color;
+      return {
+        label: s.label, data: s.points.map(p => ({ x: ts(p.date), y: p.value, date: p.date })),
+        borderColor: c, backgroundColor: c,
+        pointBackgroundColor: single ? s.points.map(p => p.value < target ? '#e4572e' : c) : c,
+        pointRadius: forPdf ? 3 : (single ? 5 : 4), pointHoverRadius: 7, borderWidth: single ? 3 : 2.5, tension: 0
+      };
+    });
+    datasets.push({ label: 'Objectif', data: [{ x: x0 - pad, y: target }, { x: x1 + pad, y: target }], borderColor: '#e4572e', borderDash: [6, 5], borderWidth: 1.5, pointRadius: 0, fill: false, isTarget: true });
     return {
       type: 'line',
-      data: {
-        datasets: [
-          { label: 'Moyenne', data: points.map((p, i) => ({ x: xs[i], y: p.value })), borderColor: line, backgroundColor: line, pointBackgroundColor: vals.map(v => v < target ? '#e4572e' : line), pointRadius: forPdf ? 3 : 5, pointHoverRadius: 7, borderWidth: 3, tension: 0 },
-          { label: 'Objectif', data: [{ x: xs[0] - pad, y: target }, { x: xs[xs.length - 1] + pad, y: target }], borderColor: '#e4572e', borderDash: [6, 5], borderWidth: 1.5, pointRadius: 0, fill: false }
-        ]
-      },
+      data: { datasets },
       options: {
         responsive: !forPdf, maintainAspectRatio: false, animation: forPdf ? false : { duration: 400 },
-        interaction: { mode: 'nearest', axis: 'x', intersect: false },
+        interaction: single ? { mode: 'nearest', axis: 'x', intersect: false } : { mode: 'nearest', intersect: true },
         scales: {
           y: { min: lo, max: hi, ticks: { color: ink, stepSize: hi - lo > 8 ? 2 : 1 }, grid: { color: grid } },
-          x: { type: 'linear', min: xs[0] - pad, max: xs[xs.length - 1] + pad, grid: { display: false },
+          x: { type: 'linear', min: x0 - pad, max: x1 + pad, grid: { display: false },
                ticks: { color: ink, maxRotation: 0, maxTicksLimit: forPdf ? 8 : 6, callback: v => new Date(v).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' }) } }
         },
         plugins: {
-          legend: { display: false },
-          tooltip: { enabled: !forPdf, filter: it => it.datasetIndex === 0, callbacks: {
-            title: items => fmtDate(points[items[0].dataIndex].date, true),
-            label: ctx => ` Moyenne : ${fmt(ctx.parsed.y)}/20`
+          legend: { display: !single, position: 'bottom', labels: { color: ink, usePointStyle: true, pointStyle: 'circle', pointStyleWidth: 9, boxHeight: 7, padding: 10, filter: it => it.text !== 'Objectif', font: { size: forPdf || narrow() ? 11 : 12 } } },
+          tooltip: { enabled: !forPdf, filter: it => !it.dataset.isTarget, callbacks: {
+            title: items => fmtDate(items[0].raw.date, true),
+            label: ctx => ` ${single ? 'Moyenne' : ctx.dataset.label} : ${fmt(ctx.parsed.y)}/20`
           } }
         }
       }
     };
   }
+  const narrow = () => window.innerWidth < 600;
+  const subjectSeries = () => state.subjects.map((s, i) => ({ label: s.name, color: col(i), points: history(s.id) })).filter(x => x.points.length);
+
+  // Graphique en toile d'araignée : moyenne de chaque matière notée
+  function radarConfig({ forPdf = false } = {}) {
+    const dark = !forPdf && isDark();
+    const ink = dark ? '#c9d6e2' : '#26394b', grid = dark ? '#2c4054' : '#dbe3ea';
+    const main = dark ? '#7fb7d6' : '#16324f';
+    const rows = state.subjects.map(s => ({ s, a: stats(s).avg })).filter(x => x.a != null);
+    const target = getTarget();
+    const max = !forPdf && narrow() ? 11 : 16;
+    const wrap = t => { const w = t.split(' '), out = []; let cur = ''; for (const x of w) { if ((cur + ' ' + x).trim().length > max && cur) { out.push(cur); cur = x; } else cur = (cur + ' ' + x).trim(); } out.push(cur); return out.length > 4 ? [...out.slice(0, 3), out.slice(3).join(' ').slice(0, max - 1) + '…'] : out; };
+    return {
+      type: 'radar',
+      data: {
+        labels: rows.map(r => wrap(r.s.name)),
+        datasets: [
+          { label: 'Moyenne', data: rows.map(r => round2(r.a)), borderColor: main, backgroundColor: main + '33', borderWidth: 2.5,
+            pointBackgroundColor: rows.map(r => r.a < target ? '#e4572e' : main), pointRadius: forPdf ? 3 : 4, pointHoverRadius: 6 },
+          { label: 'Objectif', data: rows.map(() => target), borderColor: '#e4572e', borderDash: [6, 5], borderWidth: 1.5, pointRadius: 0, backgroundColor: 'transparent' }
+        ]
+      },
+      options: {
+        responsive: !forPdf, maintainAspectRatio: false, animation: forPdf ? false : { duration: 400 },
+        scales: { r: { min: 0, max: 20, ticks: { stepSize: 5, color: dark ? '#9fb1c2' : '#6a7a89', backdropColor: 'transparent', font: { size: 11 } },
+          grid: { color: grid }, angleLines: { color: grid }, pointLabels: { color: ink, padding: 4, font: { size: !forPdf && narrow() ? 10 : 12, weight: '600' } } } },
+        layout: { padding: !forPdf && narrow() ? { left: 22, right: 22, top: 4, bottom: 4 } : 8 },
+        plugins: {
+          legend: { display: false },
+          tooltip: { enabled: !forPdf, filter: it => it.datasetIndex === 0, callbacks: {
+            title: items => rows[items[0].dataIndex].s.name,
+            label: ctx => ` ${fmt(ctx.parsed.r)}/20`
+          } }
+        }
+      },
+      _count: rows.length
+    };
+  }
+
   function renderEvolution() {
     const sel = $('#evo-subject');
     const cur = sel.value || 'all';
-    sel.innerHTML = '<option value="all">Moyenne générale</option>' + state.subjects.map(s => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('');
+    sel.innerHTML = '<option value="all">Moyenne générale</option><option value="subjects">Toutes les matières</option>'
+      + state.subjects.map(s => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('');
     sel.value = [...sel.options].some(o => o.value === cur) ? cur : 'all';
-    const pts = history(sel.value);
-    $('#evo').hidden = !state.subjects.some(s => s.grades.some(isGraded));
+    $('#charts').hidden = !state.subjects.some(s => s.grades.some(isGraded));
     const box = $('#evo-fig');
     if (state.evo) { state.evo.destroy(); state.evo = null; }
+    if (sel.value === 'subjects') {
+      const series = subjectSeries();
+      const n = series.reduce((a, s) => a + s.points.length, 0);
+      if (!series.length) { box.hidden = true; $('#evo-note').textContent = ''; return; }
+      box.hidden = false;
+      $('#evo-note').textContent = `Un point par matière à chaque nouvelle note (${n} points sur ${series.length} matière${series.length > 1 ? 's' : ''}). Clique sur un nom dans la légende pour le masquer.`;
+      box.classList.add('multi');
+      if (window.Chart) state.evo = new Chart($('#evo-canvas'), evoConfig(series));
+      return;
+    }
+    box.classList.remove('multi');
+    const pts = history(sel.value);
     if (pts.length < 2) {
       box.hidden = true;
-      $('#evo-note').textContent = pts.length ? `Un seul point pour l'instant (${fmtDate(pts[0].date, true)} : ${fmt(pts[0].value)}/20). Chaque note ajoutée à une autre date, ou chaque nouvel import Aurion, ajoutera un point.` : '';
+      $('#evo-note').textContent = pts.length ? `Un seul point pour l'instant (${fmtDate(pts[0].date, true)} : ${fmt(pts[0].value)}/20). Chaque note ajoutée à une autre date, ou chaque nouvel import Aurion, ajoutera un point.` : 'Pas encore de note dans cette matière.';
       return;
     }
     box.hidden = false;
     const first = pts[0].value, last = pts[pts.length - 1].value, diff = last - first;
     $('#evo-note').innerHTML = `${pts.length} points, du ${fmtDate(pts[0].date, true)} au ${fmtDate(pts[pts.length - 1].date, true)} : <strong class="${diff >= 0 ? 'up' : 'down'}">${diff >= 0 ? '+' : '−'}${fmt(Math.abs(diff))} pt</strong>`;
-    if (window.Chart) state.evo = new Chart($('#evo-canvas'), evoConfig(pts));
+    if (window.Chart) state.evo = new Chart($('#evo-canvas'), evoConfig([{ label: 'Moyenne', points: pts }]));
+  }
+  function renderRadar() {
+    if (state.radar) { state.radar.destroy(); state.radar = null; }
+    const { _count, ...cfg } = radarConfig();
+    const ok = _count >= 3;
+    $('#radar-fig').hidden = !ok;
+    const below = state.subjects.filter(s => { const a = stats(s).avg; return a != null && a < getTarget(); }).map(s => s.name);
+    $('#radar-note').textContent = !ok ? 'Il faut au moins 3 matières notées pour dessiner la toile.'
+      : below.length ? `Sous l'objectif : ${below.join(', ')}.` : `Toutes tes matières notées sont au-dessus de l'objectif (${fmtP(getTarget())}/20).`;
+    if (ok && window.Chart) state.radar = new Chart($('#radar-canvas'), cfg);
   }
   $('#evo-subject').addEventListener('change', renderEvolution);
+  $('#sems').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    if (b.getAttribute('aria-disabled') === 'true') toast(`${b.dataset.sem} : bientôt disponible (pondérations à venir).`);
+  });
 
   function render() {
     destroyCharts();
     renderSummary();
     renderEvolution();
+    renderRadar();
     $('#empty').hidden = state.subjects.length > 0;
     $('#cards').innerHTML = state.subjects.map(cardHTML).join('');
     const animate = !matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -784,7 +872,7 @@
       const cv = document.createElement('canvas');
       cv.width = 1000; cv.height = 360; cv.style.cssText = 'position:fixed;left:-9999px;top:0;width:1000px;height:360px';
       document.body.appendChild(cv);
-      const ch = new Chart(cv, evoConfig(evoPts, { forPdf: true }));
+      const ch = new Chart(cv, evoConfig([{ label: 'Moyenne générale', points: evoPts }], { forPdf: true }));
       const img = cv.toDataURL('image/png'); ch.destroy(); cv.remove();
       doc.setFont('helvetica', 'bold'); doc.setFontSize(12); doc.setTextColor(20);
       doc.text('Évolution de la moyenne générale', M, yEvo);
