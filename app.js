@@ -663,7 +663,11 @@
     try { return new TextDecoder('utf-8', { fatal: true }).decode(buf); }
     catch { return new TextDecoder('windows-1252').decode(buf); }
   }
-  const prettyCourse = t => { const x = fixText(t).replace(/_/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase().replace(/\bba s(\d)\b/g, 'BA S$1').replace(/\b(i{1,3})$/, m => m.toUpperCase()); return x.charAt(0).toUpperCase() + x.slice(1); };
+  const ACCENTS = { efficacite: 'efficacité', economique: 'économique', economie: 'économie', methodes: 'méthodes', mathematiques: 'mathématiques',
+    decision: 'décision', '2eme': '2ème', '3eme': '3ème', '1ere': '1ère', strategie: 'stratégie', ethique: 'éthique', societe: 'société',
+    developpement: 'développement', reseaux: 'réseaux', general: 'général', generale: 'générale', creativite: 'créativité', seminaire: 'séminaire',
+    responsabilite: 'responsabilité', competences: 'compétences', bureautiques: 'bureautiques', francais: 'français', allemand: 'allemand' };
+  const prettyCourse = t => { const x = fixText(t).replace(/_/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase().replace(/[a-z0-9]+/g, w => ACCENTS[w] || w).replace(/\bba s(\d)\b/g, 'BA S$1').replace(/\b(i{1,3})$/, m => m.toUpperCase()); return x.charAt(0).toUpperCase() + x.slice(1); };
   function parseAurion(text) {
     const lines = text.replace(/^﻿/, '').split(/\r?\n/).filter(l => l.trim());
     if (!lines.length || !/^"?note"?;/i.test(lines[0].trim())) throw new Error("Ce fichier ne ressemble pas à l'export Aurion « Mes notes aux épreuves » (CSV).");
@@ -754,9 +758,9 @@
         if (f.size > 2e6) throw new Error('Fichier trop volumineux.');
         const { rows, skipped } = parseAurion(decodeFile(await f.arrayBuffer()));
         const sem = $('#imp-sem').value;
-        const keep = rows.filter(r => r.sem === sem);
+        const keep = rows.filter(r => r.sem === sem || r.sem === '');
         if (!keep.length) throw new Error(`Aucune note du ${sem} dans ce fichier.`);
-        return { rows: keep, skipped, sem, other: rows.length - keep.length };
+        return { rows: keep, skipped, sem, other: rows.length - keep.length, annual: [...new Set(keep.filter(r => r.sem === '').map(r => r.courseName))] };
       }
     });
     if (!parsed) return;
@@ -777,6 +781,7 @@
       html: `<p><strong>${count('new')}</strong> nouvelle(s) note(s), <strong>${count('update')}</strong> mise(s) à jour, ${count('same')} inchangée(s).</p>
         ${parsed.skipped.length ? `<p class="warn">Ignoré : ${parsed.skipped.map(esc).join(' · ')}</p>` : ''}
         ${parsed.other ? `<p class="muted small">${parsed.other} note(s) d'un autre semestre ignorée(s).</p>` : ''}
+        ${parsed.annual.length ? `<p class="muted small">Cours sans semestre dans Aurion (cours annuel ou mutualisé), inclus ici : ${parsed.annual.map(esc).join(', ')}.</p>` : ''}
         <ul class="imp">${groups}</ul>
         ${plan.entries.some(e => e.isNew) ? '<p class="muted small">Les nouvelles matières sont créées avec le modèle du S1 quand il existe. Vérifie leurs crédits ECTS.</p>' : ''}`,
       read: async () => {
@@ -858,7 +863,7 @@
       startY: 52, margin: { left: M, right: M },
       head: [['Matière', 'ECTS', '% noté', 'Moyenne /20']],
       body: state.subjects.map(s => { const st = stats(s); return [s.name, pdfNum(s.credits, 1), `${fmtP(st.w)} %`, pdfNum(st.avg)]; }),
-      foot: [['Moyenne générale (pondérée ECTS)', pdfNum(o.credits, 1), '', pdfNum(o.avg)]],
+      foot: [['Moyenne générale (pondérée ECTS)', { content: pdfNum(o.credits, 1), styles: { halign: 'right' } }, '', { content: pdfNum(o.avg), styles: { halign: 'right' } }]],
       headStyles: { fillColor: deep }, footStyles: { fillColor: [235, 240, 245], textColor: 20 },
       columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right', fontStyle: 'bold' } },
       styles: { fontSize: 10, cellPadding: 2.4 }
