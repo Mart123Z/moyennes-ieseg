@@ -81,9 +81,9 @@ window.SEMESTER_TEMPLATES = [
         evals: [['Analyse SWOT + plan de développement', 85], ['Participation', 15]]
       },
       {
-        name: 'Efficacité relationnelle et collective (théâtre)', code: '', ects: null, ectsProvisoire: 1,
-        source: 'Support S1 – Efficacité relationnelle par le théâtre',
-        evals: [['Participation et progression personnelle', 60], ['Examen (carte blanche en groupe)', 40]]
+        name: 'Efficacité relationnelle et collective', code: '1723', ects: null, ectsProvisoire: 1,
+        source: "Code Aurion 1723 ; les épreuves dépendent de l'atelier (théâtre : participation 60 % + examen 40 % ; autre atelier : vidéo 30 %…), elles sont ajoutées à l'import",
+        evals: []
       }
     ]
   }
